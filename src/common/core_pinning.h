@@ -23,9 +23,11 @@ struct LogicalProcessor {
     u32 last_level_cache_size{};
 };
 
-/// Ryzen X3D parts put a larger L3 on one CCD. When every processor has the same efficiency class
-/// but the L3 sizes differ, the processors on the largest L3 move up one class, so they count as
-/// the performance cores. Returns whether it changed anything.
+/// Dual-CCD Ryzen X3D parts (12 or 16 cores) put a larger L3 on one CCD. When every processor
+/// has the same efficiency class, the L3 sizes differ, and there are at least 12 physical cores,
+/// the processors on the largest L3 move up one class, so they count as the performance cores.
+/// A single-CCD part such as the Ryzen 7 5700X3D (8 cores, one shared L3) is left unchanged, even
+/// if the cache enumeration reports two sizes. Returns whether it changed anything.
 bool PreferLargestLastLevelCache(std::span<LogicalProcessor> processors);
 
 /// Physical cores of the fastest class needed before the GPU threads are pinned.

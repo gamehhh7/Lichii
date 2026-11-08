@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 #include <algorithm>
+#include <vector>
 
 #include "common/core_pinning.h"
 
@@ -18,6 +19,20 @@ bool PreferLargestLastLevelCache(std::span<LogicalProcessor> processors) {
     if (slowest.efficiency_class != fastest.efficiency_class ||
         smallest.last_level_cache_size == 0 ||
         smallest.last_level_cache_size == largest.last_level_cache_size) {
+        return false;
+    }
+    // 7900X3D is 12 cores and 7950X3D is 16; both are two CCDs with unequal L3. The 6- and
+    // 8-core X3D parts, including the Ryzen 7 5700X3D, are one CCD. Do not invent a second CCD
+    // from a split cache report on those chips.
+    std::vector<u32> cores;
+    cores.reserve(processors.size());
+    for (const LogicalProcessor& processor : processors) {
+        cores.push_back(processor.core);
+    }
+    std::ranges::sort(cores);
+    cores.erase(std::unique(cores.begin(), cores.end()), cores.end());
+    constexpr std::size_t MinPhysicalCoresForDualCcd = 12;
+    if (cores.size() < MinPhysicalCoresForDualCcd) {
         return false;
     }
     for (LogicalProcessor& processor : processors) {

@@ -458,8 +458,9 @@ void RememberCurrentThreadNice(pid_t tid, s32 nice_value) {
 namespace {
 // Hybrid CPUs (Intel P/E cores): Windows alone may run the emulator's time-critical threads on an
 // efficiency core, where a frame takes much longer. Keep them on the fastest cores with CPU sets
-// (a soft affinity the power manager respects) and background workers on the slower ones. Ryzen
-// X3D parts count the CCD with the larger L3 as the fast cores (PreferLargestLastLevelCache).
+// (a soft affinity the power manager respects) and background workers on the slower ones. Dual-CCD
+// Ryzen X3D parts count the CCD with the larger L3 as the fast cores (PreferLargestLastLevelCache).
+// A single-CCD part such as the Ryzen 7 5700X3D does not: every core stays in one class.
 // EDEN_HYBRID_CORES=0 turns this off.
 struct WindowsCpuSets {
     std::vector<Common::LogicalProcessor> processors;
@@ -882,10 +883,11 @@ void PinHostThread(HostThreadRole role, size_t index) {
         for (const KAFFINITY core : cores) {
             all |= core;
         }
-        // The default: the GPU threads on cores 1-3 of the first core complex (core 0 takes most
-        // interrupts and DPCs); with 8 or more cores all six guest cores float over cores 0 and
-        // 4-7 (both SMT siblings each), so only one guest core at a time runs paired, whichever
-        // has slack. Fewer cores: front and back only.
+        // The default: the GPU threads on cores 1-3 (core 0 takes most interrupts and DPCs); with
+        // 8 or more cores all six guest cores float over cores 0 and 4-7 (both SMT siblings
+        // each), so only one guest core at a time runs paired, whichever has slack. On one CCD
+        // (Ryzen 7 5700X3D: 8 cores, one 96 MiB L3) that is the whole chip, not a CCD parked
+        // off. Fewer cores: front and back only.
         // EDEN_NX2_PIN_CORES=front,back,worker and EDEN_NX2_PIN_GUEST=g0,g1,...,g5 (each a core
         // or cores joined by '+', '-' for any core the GPU threads don't use) change it.
         const bool wide = cores.size() >= 8;
