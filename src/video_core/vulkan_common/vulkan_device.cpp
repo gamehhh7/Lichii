@@ -1638,7 +1638,14 @@ void Device::RemoveUnsuitableExtensions() {
                                        VK_EXT_EXTENDED_DYNAMIC_STATE_3_EXTENSION_NAME);
 
     // VK_EXT_robustness2
-    features.robustness2.robustBufferAccess2 = VK_FALSE;
+    // AMD keeps robustBufferAccess2: games read storage buffers out of bounds and AMD returned
+    // garbage without it (Ocarina's Hyrule Field fog volume turned the sky white).
+    const VkDriverId robustness_driver = properties.driver.driverID;
+    if (robustness_driver != VK_DRIVER_ID_AMD_PROPRIETARY &&
+        robustness_driver != VK_DRIVER_ID_AMD_OPEN_SOURCE &&
+        robustness_driver != VK_DRIVER_ID_MESA_RADV) {
+        features.robustness2.robustBufferAccess2 = VK_FALSE;
+    }
     features.robustness2.robustImageAccess2 = VK_FALSE;
     extensions.robustness_2 = features.robustness2.nullDescriptor;
 
@@ -1649,6 +1656,25 @@ void Device::RemoveUnsuitableExtensions() {
 
     RemoveExtensionFeatureIfUnsuitable(extensions.robustness_2, features.robustness2,
                                        robustness2_extension_name);
+
+    // VK_EXT_shader_atomic_float: only 32-bit float adds on storage buffers are used, and only on
+    // AMD drivers until other vendors are validated; elsewhere a compare-exchange loop adds.
+    {
+        const VkDriverId atomic_driver = properties.driver.driverID;
+        const bool amd = atomic_driver == VK_DRIVER_ID_AMD_PROPRIETARY ||
+                         atomic_driver == VK_DRIVER_ID_AMD_OPEN_SOURCE ||
+                         atomic_driver == VK_DRIVER_ID_MESA_RADV;
+        const VkBool32 buffer_add =
+            amd ? features.shader_atomic_float.shaderBufferFloat32AtomicAdd : VK_FALSE;
+        void* const next_feature = features.shader_atomic_float.pNext;
+        features.shader_atomic_float = {};
+        features.shader_atomic_float.sType =
+            VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_ATOMIC_FLOAT_FEATURES_EXT;
+        features.shader_atomic_float.pNext = next_feature;
+        features.shader_atomic_float.shaderBufferFloat32AtomicAdd = buffer_add;
+        RemoveExtensionFeatureIfUnsuitable(buffer_add == VK_TRUE, features.shader_atomic_float,
+                                           VK_EXT_SHADER_ATOMIC_FLOAT_EXTENSION_NAME);
+    }
 
     // Image robustness
     extensions.robust_image_access = features.robust_image_access.robustImageAccess;

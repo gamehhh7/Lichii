@@ -1,0 +1,179 @@
+name: Integrated Windows binaries
+'on':
+  push:
+    branches:
+    - integration/optimizations-20261108
+  workflow_dispatch: null
+permissions:
+  contents: read
+concurrency:
+  group: integrated-windows-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build:
+    name: ${{ matrix.platform }} binary
+    runs-on: ${{ matrix.runner }}
+    env:
+      CCACHE_DIR: ${{ github.workspace }}/.ccache
+      CCACHE_MAXSIZE: 3000M
+      CCACHE_COMPILERCHECK: content
+      SCCACHE_DIR: ${{ github.workspace }}/.sccache
+      SCCACHE_CACHE_SIZE: 3G
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+        - platform: windows-x86_64
+          runner: windows-2022
+        - platform: windows-x86_64-pgo
+          runner: windows-2022
+          pgo: true
+          profile: lichii-windows.profdata
+    steps:
+    - name: Check out source
+      uses: actions/checkout@v5
+      with:
+        persist-credentials: false
+    - name: Check PGO profile
+      if: matrix.pgo
+      shell: bash
+      run: 'set -euo pipefail
+
+        test -s "${{ matrix.profile || ''eglantine.profdata'' }}"
+
+        '
+    - name: Set up MSVC
+      if: startsWith(matrix.platform, 'windows')
+      uses: ilammy/msvc-dev-cmd@v1
+    - name: Install LLVM on Windows
+      if: startsWith(matrix.platform, 'windows')
+      shell: pwsh
+      run: ./tools/windows/install-llvm.ps1
+    - name: Install Qt on Windows
+      if: startsWith(matrix.platform, 'windows')
+      uses: jurplel/install-qt-action@v4
+      with:
+        version: 6.8.3
+        host: windows
+        target: desktop
+        arch: win64_msvc2022_64
+        modules: qtcharts
+        cache: 'true'
+    - name: Install sccache on Windows
+      if: startsWith(matrix.platform, 'windows')
+      shell: pwsh
+      run: '$zip = Join-Path $env:RUNNER_TEMP ''sccache.zip''
+
+        Invoke-WebRequest -OutFile $zip https://github.com/mozilla/sccache/releases/download/v0.19.0/sccache-v0.19.0-x86_64-pc-windows-msvc.zip
+
+        Expand-Archive $zip -DestinationPath (Join-Path $env:RUNNER_TEMP ''sccache'')
+
+        $bin = (Get-ChildItem -Recurse -Filter sccache.exe (Join-Path $env:RUNNER_TEMP ''sccache'')).DirectoryName
+
+        $bin | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+        '
+    - name: Install Vulkan SDK on Windows
+      if: startsWith(matrix.platform, 'windows')
+      shell: pwsh
+      run: ./tools/windows/install-vulkan-sdk.ps1
+    - name: Verify Vulkan tools on Windows
+      if: startsWith(matrix.platform, 'windows')
+      shell: pwsh
+      run: glslangValidator --version
+    - name: Restore CPM downloads
+      id: cpm-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: .cache/cpm
+        key: cpm-${{ matrix.platform }}-v2-${{ hashFiles('cpmfile.json', 'CMakeLists.txt', 'CMakeModules/CPM*.cmake', 'externals/**/CMakeLists.txt',
+          'src/**/CMakeLists.txt') }}
+        restore-keys: 'cpm-${{ matrix.platform }}-v2-
+
+          cpm-${{ runner.os }}-
+
+          '
+    - name: Restore compiler objects
+      id: compiler-cache
+      uses: actions/cache/restore@v5
+      with:
+        path: '.ccache
+
+          .sccache
+
+          '
+        key: objects-${{ matrix.platform }}${{ matrix.profile && format('-{0}', hashFiles(matrix.profile)) || '' }}-v2-${{
+          github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+        restore-keys: 'objects-${{ matrix.platform }}${{ matrix.profile && format(''-{0}'', hashFiles(matrix.profile)) ||
+          '''' }}-v2-${{ github.sha }}-
+
+          objects-${{ matrix.platform }}${{ matrix.profile && format(''-{0}'', hashFiles(matrix.profile)) || '''' }}-v2-
+
+          '
+    - name: Configure Windows
+      if: startsWith(matrix.platform, 'windows')
+      shell: bash
+      run: "set -euo pipefail\nflags=\"-DWIN32 -D_WINDOWS -DNOMINMAX -flto=thin\"\nif [ -n '${{ matrix.profile }}' ]; then\n\
+        \  flags+=\" -fprofile-use=$(cygpath -m \"$PWD/${{ matrix.profile }}\")\"\n  flags+=\" -Wno-error=profile-instr-out-of-date\
+        \ -Wno-error=profile-instr-unprofiled\"\n  flags+=\" -Wno-error=backend-plugin\"\nfi\ncmake -S . -B build/release\
+        \ -G Ninja \\\n  -DCMAKE_BUILD_TYPE=Release \\\n  -DENABLE_WERROR=ON \\\n  -DBUILD_TESTING=ON \\\n  -DYUZU_TESTS=ON\
+        \ \\\n  -DYUZU_CMD=ON \\\n  -DYUZU_ROOM=OFF \\\n  -DYUZU_ROOM_STANDALONE=OFF \\\n  -DYUZU_USE_BUNDLED_QT=OFF \\\n\
+        \  -DYUZU_USE_BUNDLED_SDL3=ON \\\n  -DENABLE_UPDATE_CHECKER=ON \\\n  -DLICHII_BUILD_TAG=build-${{ github.run_number\
+        \ }} \\\n  -DLICHII_BUILD_PLATFORM=${{ matrix.platform }} \\\n  -DUSE_DISCORD_PRESENCE=OFF \\\n  -DCMAKE_C_COMPILER_LAUNCHER=sccache\
+        \ \\\n  -DCMAKE_CXX_COMPILER_LAUNCHER=sccache \\\n  \"-DCMAKE_C_COMPILER=$LLVM_ROOT/bin/clang-cl.exe\" \\\n  \"-DCMAKE_CXX_COMPILER=$LLVM_ROOT/bin/clang-cl.exe\"\
+        \ \\\n  \"-DCMAKE_LINKER=$LLVM_ROOT/bin/lld-link.exe\" \\\n  \"-DCMAKE_AR=$LLVM_ROOT/bin/llvm-lib.exe\" \\\n  \"-DCMAKE_C_FLAGS=$flags\"\
+        \ \\\n  \"-DCMAKE_CXX_FLAGS=-EHsc $flags\"\n"
+    - name: Save CPM downloads
+      if: steps.cpm-cache.outputs.cache-hit != 'true'
+      uses: actions/cache/save@v5
+      with:
+        path: .cache/cpm
+        key: ${{ steps.cpm-cache.outputs.cache-primary-key }}
+    - name: Build
+      shell: bash
+      run: 'if command -v ccache > /dev/null; then ccache --zero-stats; else sccache --zero-stats; fi
+
+        targets="yuzu yuzu-cmd tests"
+
+        if [[ "${{ matrix.platform }}" == windows* ]]; then targets="$targets lichii-updater"; fi
+
+        cmake --build build/release --target $targets --parallel
+
+        if command -v ccache > /dev/null; then ccache --show-stats; else sccache --show-stats; fi
+
+        '
+    - name: Stop sccache on Windows
+      if: always() && startsWith(matrix.platform, 'windows') && steps.compiler-cache.outcome == 'success'
+      shell: pwsh
+      run: sccache --stop-server
+    - name: Save compiler objects
+      if: always() && steps.compiler-cache.outcome == 'success'
+      uses: actions/cache/save@v5
+      with:
+        path: '.ccache
+
+          .sccache
+
+          '
+        key: ${{ steps.compiler-cache.outputs.cache-primary-key }}
+    - name: Run regression tests
+      shell: bash
+      run: ctest --test-dir build/release --output-on-failure --no-tests=error --parallel "$NUMBER_OF_PROCESSORS"
+    - name: Package Windows binary
+      if: startsWith(matrix.platform, 'windows')
+      shell: pwsh
+      run: "foreach ($exe in 'lichii.exe', 'eden-cli.exe') {\n  if (-not (Test-Path \"build/release/bin/$exe\")) {\n    throw\
+        \ \"build/release/bin/$exe was not produced\"\n  }\n}\nwindeployqt --release --no-translations build/release/bin/lichii.exe\n"
+    - name: Upload Windows binary
+      if: startsWith(matrix.platform, 'windows')
+      uses: actions/upload-artifact@v7
+      with:
+        name: lichii-${{ matrix.platform }}-${{ github.sha }}
+        path: 'build/release/bin/
+
+          !build/release/bin/tests.exe
+
+          '
+        if-no-files-found: error
+        retention-days: 30
+    timeout-minutes: 120

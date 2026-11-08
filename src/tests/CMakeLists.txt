@@ -68,6 +68,7 @@ add_executable(tests
     video_core/async_draw_policy.cpp
     video_core/async_shader_emission.cpp
     video_core/pipeline_build.cpp
+    video_core/pipeline_eviction_policy.cpp
     video_core/pipeline_optimization.cpp
     video_core/spirv_atomic_retry.cpp
     video_core/spirv_storage_alignment.cpp
@@ -76,6 +77,7 @@ add_executable(tests
     video_core/multi_range_refresh.cpp
     video_core/command_fetch_order.cpp
     video_core/gpu_written_pages.cpp
+    video_core/async_report_wait.cpp
     video_core/command_writer.cpp
     video_core/split_fence_wait.cpp
     video_core/command_snapshot_suspensions.cpp
@@ -109,6 +111,7 @@ add_executable(tests
     video_core/spirv_software_matrix.cpp
     video_core/spirv_builtin_capabilities.cpp
     video_core/spirv_min_max_denorms.cpp
+    video_core/spirv_float_atomic_add.cpp
     video_core/spirv_nan_safe_min_max.cpp
     video_core/virtual_range_cache.cpp
     common/bit_field.cpp

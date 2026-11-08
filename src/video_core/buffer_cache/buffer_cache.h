@@ -841,7 +841,7 @@ void BufferCache<P>::BindComputeStorageBuffer(size_t ssbo_index, u32 cbuf_index,
     const Binding binding =
         table_pointer && holder == 0
             ? NULL_BINDING
-            : StorageBufferBinding(ssbo_addr, cbuf_index, is_written, native_pointer,
+            : StorageBufferBinding(ssbo_addr, cbuf_index, is_written, kepler_compute->IsDlssDispatch(),
                                    table_pointer);
     channel_state->compute_storage_buffers[ssbo_index] = binding;
     if (table_pointer && holder != 0) {
@@ -3045,6 +3045,8 @@ Binding BufferCache<P>::StorageBufferBinding(GPUVAddr ssbo_addr, u32 cbuf_index,
             // A native (Switch 2) compute program's pointer is bare: the word after it is another
             // parameter (a dimension, stride or texture handle), not an NVN buffer size. Taking it
             // as one bound Fortune's Weave's DLSS input features to 266 bytes and dropped the rest.
+            // Only DLSS passes size from the mapping: doing it for every native dispatch binds up to
+            // 8 MiB per buffer and slows Hyrule Warriors' fights to a few fps, then hangs them.
             if (native_pointer) {
                 return (std::min)(memory_layout_size, static_cast<u32>(8_MiB));
             }
