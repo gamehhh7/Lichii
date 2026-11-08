@@ -754,8 +754,8 @@ bool ComputePipeline::Configure(Tegra::Engines::KeplerCompute& kepler_compute,
 
     const bool is_rescaling = !info.texture_descriptors.empty() || !info.image_descriptors.empty();
     auto bind = [this, descriptor_data, is_rescaling, descriptor_buffer_offset,
-                      descriptor_buffer_chunk, bind_descriptor_buffer,
-                      rescaling_data = rescaling.Data()](vk::CommandBuffer cmdbuf) {
+                 descriptor_buffer_chunk, bind_descriptor_buffer,
+                 rescaling_data = rescaling.Data()](vk::CommandBuffer cmdbuf) {
         if (bind_descriptor_buffer) {
             const VkDescriptorBufferBindingInfoEXT binding_info{
                 descriptor_buffer_ring.BindingInfo(descriptor_buffer_chunk)};

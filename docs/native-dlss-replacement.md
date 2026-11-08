@@ -36,6 +36,14 @@ and should remain private. No shaders are skipped or game files changed by this 
 
 ## Ocarina of Time
 
+Two Ocarina of Time replacements are in this build. They do not run on the same frame.
+
+The newer NVIDIA path (DLSS Quality / DLAA, jitter, motion vectors, particles) runs when Ocarina of Time anti-aliasing is set to NVIDIA DLSS or NVIDIA DLAA. While that mode is selected, the camera-reprojection path stays off.
+
+The camera-reprojection path (AMD FSR 3.1 on any supported Vulkan GPU, or the older camera-based NVIDIA DLSS) runs from **Use AMD FSR 3.1 upscaling in Ocarina of Time** (`ocarina_fsr`) or `EDEN_NX2_DLSS_REPLACEMENT`, and only when the newer DLSS/DLAA mode is not selected.
+
+### Camera-reprojection FSR and DLSS
+
 The Legend of Zelda: Ocarina of Time (`0400486024DEC000`) has no DLSS of its own. Its
 end-of-frame upscale pass can be replaced with FSR 3.1 on Linux or Windows, on any supported
 Vulkan GPU, or NVIDIA DLSS on Windows. The **Use AMD FSR 3.1 upscaling in Ocarina of Time**
@@ -87,6 +95,56 @@ A game update that changes them disables the replacement and leaves the game's p
 The "Ocarina of Time anti-aliasing" option (No sharpening, docs/nx2/oot-network-bypass.md)
 bypasses the same network on other GPUs. It does nothing while this replacement is enabled:
 temporal upscaling takes precedence because it replaces the same output pass.
+
+### Jittered NVIDIA DLSS and DLAA
+
+The Legend of Zelda: Ocarina of Time (`0400486024DEC000`) has no DLSS of its own. It renders its
+3D, tonemaps it, and runs a single-frame anti-aliasing network with a sharpening output pass.
+"Ocarina of Time anti-aliasing" set to NVIDIA DLSS (4K Quality) or NVIDIA DLAA (4K) replaces
+that network with NVIDIA DLSS ("Use NVIDIA DLSS" on, Streamline with DLSS for the device). Both
+set the game's resolution scale to 1.5x (4K output). Implementation: `video_core/oot_dlss.h`,
+the hooks in `vk_rasterizer.cpp`, `KeplerCompute::ReplaceOotNetwork`, `TextureCache::OotDlss`,
+`vk_oot_motion_vectors.cpp` and `vk_oot_object_motion.cpp`; the design and measurements are in
+docs/nx2/oot-motion-vectors-plan.md.
+
+- **Jitter:** the viewport of every scene-geometry draw (into the scene depth, testing or writing
+  it) gets a Halton sub-pixel offset. Full-screen passes are not jittered, nor anything drawn
+  after DLSS ran in the frame.
+- **Motion vectors:** camera motion is rebuilt from the scene depth and the game's current and
+  previous view-projection, with a 0.35-pixel dead zone so a still camera does not wobble.
+  Per-object motion comes from vertex history for vertex pipelines and from re-running mesh
+  programs on last frame's constants (`ir_opt/oot_shadow_pass.cpp`); draws that can do neither
+  keep camera motion and are logged once with the reason.
+- **DLAA (4K):** the 3D renders at 3840x2160 and DLSS runs on the linear HDR scene colour before
+  the tonemap, with the tonemap's own exposure (its constant buffer 3) as DLSS's exposure.
+  Bloom, the tonemap and the HUD then work on DLSS's result.
+- **Quality (4K):** the 3D stays at the game's 2560x1440 (only the images after it are
+  rescaled) and DLSS upscales the tonemapped image in place of the network.
+- **Particles:** fireflies, dust and fairy glow are transparent draws after the fog composite
+  that don't write depth. They have no motion vectors and trailed in DLSS's history, so DLSS runs
+  before them: at the first such draw in DLAA; in Quality the tonemap draw is repeated from a
+  copy of the scene colour taken there, DLSS upscales that, and what the particles added to the
+  tonemapped image is added to its output. The opaque draws after the fog composite (water
+  surfaces) stay in DLSS's input.
+- **Textures:** NVIDIA's LOD bias for the render-to-output ratio (log2(render / display) - 1:
+  -1.585 in Quality, -1 in DLAA), and a chosen anisotropic level also covers LOD-clamped
+  samplers.
+- **Sharpening:** DLSS Sharpness (AMD RCAS on DLSS's output) applies to Quality only.
+- **Fallback:** a frame DLSS cannot evaluate copies the tonemapped image in place of the network
+  (no sharpening). Every 600 frames the log counts the reasons
+  (`OoT DLSS: fallbacks to a copy in the last 600 frames: ...`).
+
+Shader hashes, program keys and constant buffer offsets are those of the game's current build;
+a game update needs them re-checked. While either DLSS mode is selected, No sharpening
+(docs/nx2/oot-network-bypass.md) steps aside: DLSS replaces the same output pass.
+
+Switches for comparison runs (all off unless set): `EDEN_OOT_DLSS=1` (DLSS without the setting),
+`EDEN_OOT_DLSS_OUTPUT=dlaa|quality`, `EDEN_OOT_OBJECT_MOTION=0`, `EDEN_OOT_DLSS_HDR=0` (DLAA after
+the tonemap), `EDEN_OOT_DLSS_BEFORE=fog|tonemap` (where DLSS runs on the HDR path),
+`EDEN_OOT_DLSS_EXPOSURE=0` (DLSS's auto exposure), `EDEN_OOT_LOD_BIAS=<n>`,
+`EDEN_OOT_CAMERA_DEADZONE=<px>`, `EDEN_OOT_DLSS_MASK_GAIN=<n>`, `EDEN_OOT_DLSS_FLIP_Y=0`,
+`EDEN_OOT_MOTION_CHECK=1` (measures the motion vectors' reprojection error),
+`EDEN_OOT_MOTION_DEBUG=1` (shows the motion vectors) and `EDEN_OOT_CAMERA_TRACE=1`.
 
 ## Settings and comparison runs
 
