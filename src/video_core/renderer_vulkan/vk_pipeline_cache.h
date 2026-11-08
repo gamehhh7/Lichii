@@ -205,6 +205,11 @@ private:
 
     void QueueVulkanPipelineCacheFlush();
 
+    /// Queues one write of the driver pipeline cache file on the serialization thread, with no
+    /// throttle. For the end of a warm-up stage: its builds never reach the timed flush, which
+    /// counts only pipelines built during play.
+    void QueueVulkanPipelineCacheSave();
+
     /// The title's warm-compute.bin (ShaderWarm::ComputeWarmPath, EDEN_NX2_COMPUTE_WARM=<file>
     /// overrides): compute programs prepared from the game files are converted (missing reads
     /// guessed) and built in the background, then thrown away. Nothing uses them; they only fill
@@ -213,6 +218,11 @@ private:
     void StartComputeWarm(u64 title_id);
     std::vector<std::jthread> compute_warm_threads;
     std::atomic<bool> compute_warm_done{true};
+    /// Graphics warm-up threads still running (each lowers it as its last step).
+    std::atomic<size_t> graphics_warm_active{0};
+    /// This load runs the warm-ups on the loading screen (shader_warm_at_boot): every CPU thread,
+    /// normal priority, and LoadDiskResources waits for them.
+    bool warm_before_start{false};
 
     /// The title's warm-graphics.bin (ShaderWarm::GraphicsWarmPath, EDEN_NX2_GRAPHICS_WARM=<file>
     /// overrides; needs graphics pipeline libraries): vertex and fragment programs prepared from
@@ -220,6 +230,8 @@ private:
     /// warm-up, then released; the driver's disk cache keeps them, so a later pipeline with those
     /// stages costs a link.
     void StartGraphicsWarm(u64 title_id);
+    void WaitForWarmUps(std::stop_token stop_loading,
+                        const VideoCore::DiskResourceLoadCallback& callback);
     std::vector<std::jthread> graphics_warm_threads;
 
     /// Set as soon as emulation is asked to stop (the loading stop token): the warm-ups end
