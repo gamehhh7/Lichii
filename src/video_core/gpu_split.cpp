@@ -696,15 +696,16 @@ u64 GpuSplit::PendingWriteTarget(const void* space, GPUVAddr address, u64 size, 
     if (last_page - first_page >= 64) {
         return (std::max)(target, last_record);
     }
-    // windows.h defines `small` as char, so this name cannot be `small`.
-    const bool narrow = size <= 256;
+    // windows.h defines `small` as char, and GpuSplit::narrow is the drain mode, so this
+    // range check cannot use either name.
+    const bool scan_words = size <= 256;
     for (GPUVAddr page = first_page; page <= last_page; ++page) {
         const PageSlot* const slot = FindPage((page << 2) | sid);
         if (slot == nullptr || slot->any <= (std::max)(target, consumed_cache)) {
             // No pending write in the page (a pending slot that gave way raised the floor).
             continue;
         }
-        if (!narrow) {
+        if (!scan_words) {
             target = slot->any;
             continue;
         }
