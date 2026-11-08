@@ -1539,16 +1539,6 @@ bool FrontSkipSame() {
     return skip;
 }
 
-// Executable methods the front drops when they keep the register's value. Draw macros write them
-// for every instance (~500,000 same values a second in Ocarina of Time); they only store the value
-// and no dirty flag covers them. index_buffer.first marks the index buffer dirty, which replaces
-// the binding an inline or small index draw left; topology_override is not part of an instance
-// loop, so any write to it ends a deferred draw.
-bool FrontDropsSameValue(u32 method) {
-    return method == MAXWELL3D_REG_INDEX(vertex_buffer.first) ||
-           method == MAXWELL3D_REG_INDEX(vertex_buffer.count);
-}
-
 } // Anonymous namespace
 
 Maxwell3D::FrontState& Maxwell3D::Front(Core::System& system, VideoCommon::GpuSplit& split) {
