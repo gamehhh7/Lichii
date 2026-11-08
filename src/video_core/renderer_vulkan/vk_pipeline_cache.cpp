@@ -1655,7 +1655,7 @@ void PipelineCache::StartComputeWarm(u64 title_id) {
                 break;
             }
             Entry entry;
-            entry.env.Deserialize(file);
+            entry.env.Deserialize(file, end);
             if (entry.env.ShaderStage() != Shader::Stage::Compute) {
                 LOG_WARNING(Render_Vulkan, "Nx2Perf compute_warm: non-compute entry in {}", path);
                 break;
@@ -1858,7 +1858,7 @@ void PipelineCache::StartGraphicsWarm(u64 title_id) {
                             reader->failed = true;
                             break;
                         }
-                        env.Deserialize(reader->file);
+                        env.Deserialize(reader->file, reader->end);
                         reader->file.read(reinterpret_cast<char*>(&key), sizeof(key));
                         ++reader->read;
                         reader->position = reader->file.tellg();

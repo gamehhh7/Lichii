@@ -4739,8 +4739,6 @@ void RasterizerVulkan::UpdateViewportsState(Tegra::Engines::Maxwell3D::Regs& reg
         });
         return;
     }
-    const bool is_rescaling{texture_cache.IsRescaling()};
-    const float scale = is_rescaling ? Settings::values.resolution_info.up_factor : 1.0f;
     std::array viewport_list{
         GetViewportState(device, regs, 0, scale),  GetViewportState(device, regs, 1, scale),
         GetViewportState(device, regs, 2, scale),  GetViewportState(device, regs, 3, scale),

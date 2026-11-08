@@ -543,6 +543,14 @@ void QueryCacheBase<Traits>::CounterReport(GPUVAddr addr, QueryType counter_type
         std::memcpy(&value, pointer, sizeof(value));
         return value == payload;
     };
+    // Same fence-accuracy test the performance pack used: a default fence on a low GPU
+    // level, or an explicit non-balanced non-accurate fence, is written without waiting.
+    const bool is_synced =
+        (Settings::IsGPUFenceBehaviorDefault()
+             ? !Settings::IsGPULevelHigh()
+             : !Settings::IsGPUFenceBehaviorBalanced() &&
+                   !Settings::IsGPUFenceBehaviorAccurate()) &&
+        is_fence;
     if (is_fence) {
         const bool lazy_fence = lazy_payload && is_synced;
         if (lazy_fence) {
