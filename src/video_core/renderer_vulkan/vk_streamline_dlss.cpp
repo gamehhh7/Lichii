@@ -376,8 +376,8 @@ void StreamlineDlssUpscaler::CreateOutput(VkExtent2D upscale_size) {
     if (output_image) {
         scheduler.Finish(); // the old output may still be in use
     }
-    const auto create = [&](vk::Image& output_image, vk::ImageView& output_view) {
-    output_image = memory_allocator.CreateImage(VkImageCreateInfo{
+    const auto create = [&](vk::Image& created_image, vk::ImageView& created_view) {
+    created_image = memory_allocator.CreateImage(VkImageCreateInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
@@ -394,11 +394,11 @@ void StreamlineDlssUpscaler::CreateOutput(VkExtent2D upscale_size) {
         .pQueueFamilyIndices = nullptr,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
     });
-    output_view = device.GetLogical().CreateImageView(VkImageViewCreateInfo{
+    created_view = device.GetLogical().CreateImageView(VkImageViewCreateInfo{
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .pNext = nullptr,
         .flags = 0,
-        .image = *output_image,
+        .image = *created_image,
         .viewType = VK_IMAGE_VIEW_TYPE_2D,
         .format = OUTPUT_FORMAT,
         .components{},
@@ -411,7 +411,7 @@ void StreamlineDlssUpscaler::CreateOutput(VkExtent2D upscale_size) {
         },
     });
     scheduler.RequestOutsideRenderPassOperationContext();
-    scheduler.Record([image = *output_image](vk::CommandBuffer cmdbuf) {
+    scheduler.Record([image = *created_image](vk::CommandBuffer cmdbuf) {
         cmdbuf.PipelineBarrier(VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
                                VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0,
                                VkImageMemoryBarrier{

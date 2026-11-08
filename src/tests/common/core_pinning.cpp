@@ -240,3 +240,47 @@ TEST_CASE("Core pinning: equal L3s, hybrid classes or unknown sizes keep the cla
     }
     CHECK(Common::PlanGpuThreadPinning(hybrid).performance_cores == 8);
 }
+
+TEST_CASE("Core pinning: Ryzen 7 5700X3D keeps one CCD", "[common][core_pinning]") {
+    // 8 cores, 16 threads, every logical processor on the same 96 MiB L3.
+    auto processors = Uniform(8, 2);
+    SetLastLevelCache(processors, 0, 16, 96 * MiB);
+    CHECK_FALSE(Common::PreferLargestLastLevelCache(processors));
+    for (const LogicalProcessor& processor : processors) {
+        CHECK(processor.efficiency_class == 0);
+    }
+    const auto plan = Common::PlanGpuThreadPinning(processors);
+    CHECK(plan.performance_cores == 8);
+    CHECK(plan.front == Ids(2, 2));
+    CHECK(plan.back == Ids(4, 2));
+    CHECK(plan.guest == Concat(Ids(0, 2), Ids(6, 10)));
+    CheckCoresAreDedicated(processors, plan);
+}
+
+TEST_CASE("Core pinning: an 8-core split L3 report is not a second CCD",
+          "[common][core_pinning]") {
+    auto processors = Uniform(8, 2);
+    SetLastLevelCache(processors, 0, 8, 96 * MiB);
+    SetLastLevelCache(processors, 8, 8, 32 * MiB);
+    CHECK_FALSE(Common::PreferLargestLastLevelCache(processors));
+    for (const LogicalProcessor& processor : processors) {
+        CHECK(processor.efficiency_class == 0);
+    }
+    CHECK(Common::PlanGpuThreadPinning(processors).performance_cores == 8);
+}
+
+TEST_CASE("Core pinning: Ryzen 9 7900X3D still prefers the larger L3 CCD",
+          "[common][core_pinning]") {
+    // 6 cores on 96 MiB and 6 cores on 32 MiB.
+    auto processors = Uniform(6, 2);
+    AddCores(processors, 6, 2, 0);
+    SetLastLevelCache(processors, 0, 12, 96 * MiB);
+    SetLastLevelCache(processors, 12, 12, 32 * MiB);
+    REQUIRE(Common::PreferLargestLastLevelCache(processors));
+    const auto plan = Common::PlanGpuThreadPinning(processors);
+    CHECK(plan.performance_cores == 6);
+    CHECK(plan.front == Ids(2, 2));
+    CHECK(plan.back == Ids(4, 2));
+    CHECK(plan.guest == Concat(Ids(0, 2), Ids(6, 6)));
+    CheckCoresAreDedicated(processors, plan);
+}
