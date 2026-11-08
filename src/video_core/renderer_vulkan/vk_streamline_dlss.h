@@ -87,6 +87,10 @@ public:
     [[nodiscard]] VkSampler PointSampler() const noexcept {
         return *point_sampler;
     }
+    /// True after an evaluation failed and the caller should stay on FSR 3.1.
+    [[nodiscard]] bool Failed() const noexcept {
+        return failed.load(std::memory_order_relaxed);
+    }
 
 private:
     void CreateOutput(VkExtent2D upscale_size);
