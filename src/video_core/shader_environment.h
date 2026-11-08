@@ -94,6 +94,10 @@ public:
         return native_source_size;
     }
 
+    [[nodiscard]] size_t CodeWords() const override {
+        return CachedSizeWords();
+    }
+
     [[nodiscard]] const std::shared_ptr<const LoweredNativeCode>& LoweredNative() const noexcept {
         return lowered_native;
     }
@@ -218,9 +222,27 @@ private:
 std::optional<u32> ReadNativeGuardConstant(Tegra::Engines::KeplerCompute& compute,
                                          Tegra::MemoryManager& memory, u32 bank, u32 offset);
 
+/// Answers for reads a FileEnvironment has no record of (EDEN_NX2_COMPUTE_WARM: programs from the
+/// game files, never run, converted only to fill the driver's cache). Without it a missing read
+/// is an error.
+struct GuessMissing {
+    u32 cbuf_bank0{0x10000000};  ///< Constant buffer 0 (driver constants, descriptor handles)
+    u32 cbuf_other{0};           ///< Other constant buffers (game constants)
+    Shader::TextureType texture_type{Shader::TextureType::ColorArray2D};
+    Shader::TexturePixelFormat pixel_format{static_cast<Shader::TexturePixelFormat>(16)};
+    bool storage_pointer_bank0{true};  ///< Bank 0 always held storage pointers in the test title's records
+    bool storage_pointer_other{false}; ///< Banks 1-4 never did (95% identical SPIR-V offline)
+};
+
 class FileEnvironment final : public Shader::Environment {
 public:
     FileEnvironment() = default;
+
+    /// Missing reads get these answers instead of an error; the guess must outlive the
+    /// environment.
+    void SetGuessMissing(const GuessMissing* guess_) noexcept {
+        guess = guess_;
+    }
     ~FileEnvironment() override = default;
 
     FileEnvironment& operator=(FileEnvironment&&) noexcept = default;
@@ -275,6 +297,10 @@ public:
     }
     bool HasNativeInstructions() const override;
 
+    [[nodiscard]] size_t CodeWords() const override {
+        return code.size();
+    }
+
     void Dump(u64 pipeline_hash, u64 shader_hash) override;
 
     /// Whether the translator asked for a constant buffer value, texture or pointer classification
@@ -305,6 +331,7 @@ private:
     /// The EnvironmentReadProperties of the host that made the record, when its build wrote them
     std::optional<u32> recorded_read_properties;
     bool lacks_recorded_value{};
+    const GuessMissing* guess{};
 };
 
 /// Where a pipeline is in a cache file, from its environment count to the end of its key, and a
